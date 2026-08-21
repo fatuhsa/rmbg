@@ -32,11 +32,10 @@ fun EngineSelector(
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             RemoverEngine.values().forEach { engine ->
-                val icon = if (engine.isOffline) "⚡" else "☁️"
                 FilterChip(
                     selected = engine == selectedEngine,
                     onClick = { onEngineSelected(engine) },
-                    label = { Text("$icon ${engine.title}") }
+                    label = { Text(engine.title) }
                 )
             }
         }

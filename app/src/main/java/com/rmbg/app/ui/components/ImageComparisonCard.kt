@@ -181,11 +181,21 @@ fun BeforeAfterComparisonCard(
                     color = Color.White,
                     shadowElevation = 6.dp
                 ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Text(
-                            text = "◀ ▶",
-                            fontSize = 10.sp,
-                            color = Color(0xFF333333)
+                    Canvas(modifier = Modifier.fillMaxSize().padding(10.dp)) {
+                        val stroke = 2.dp.toPx()
+                        val spacing = 3.dp.toPx()
+                        val midX = size.width / 2
+                        drawLine(
+                            color = Color(0xFF555555),
+                            start = Offset(midX - spacing, 0f),
+                            end = Offset(midX - spacing, size.height),
+                            strokeWidth = stroke
+                        )
+                        drawLine(
+                            color = Color(0xFF555555),
+                            start = Offset(midX + spacing, 0f),
+                            end = Offset(midX + spacing, size.height),
+                            strokeWidth = stroke
                         )
                     }
                 }
