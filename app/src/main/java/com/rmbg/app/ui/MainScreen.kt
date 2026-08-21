@@ -38,8 +38,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.rmbg.app.engine.BitmapUtils
 import com.rmbg.app.presentation.MainViewModel
+import com.rmbg.app.ui.components.BeforeAfterComparisonCard
 import com.rmbg.app.ui.components.EngineSelector
-import com.rmbg.app.ui.components.ImagePreviewBox
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -101,61 +101,17 @@ fun MainScreen(
                 }
             )
 
+            // Combined Before / After Split Comparison Card
             Text(
-                text = "Original Image",
+                text = if (state.resultBitmap != null) "Before & After (Drag Divider to Compare)" else "Image Preview",
                 style = MaterialTheme.typography.titleSmall
             )
-            ImagePreviewBox(
-                bitmap = state.selectedBitmap,
-                placeholderText = "No image selected (Tap 'Select Image')"
+            BeforeAfterComparisonCard(
+                originalBitmap = state.selectedBitmap,
+                resultBitmap = state.resultBitmap
             )
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                OutlinedButton(
-                    onClick = { imagePicker.launch("image/*") },
-                    enabled = !state.isProcessing,
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Text("Select Image")
-                }
-
-                Button(
-                    onClick = { viewModel.onRemoveBackground() },
-                    enabled = state.selectedBitmap != null && !state.isProcessing,
-                    modifier = Modifier.weight(1f)
-                ) {
-                    if (state.isProcessing) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(20.dp),
-                            color = MaterialTheme.colorScheme.onPrimary,
-                            strokeWidth = 2.dp
-                        )
-                    } else {
-                        Text("Remove BG")
-                    }
-                }
-            }
-
-            Text(
-                text = state.statusMessage,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.align(Alignment.CenterHorizontally)
-            )
-
-            Text(
-                text = "Result Preview",
-                style = MaterialTheme.typography.titleSmall
-            )
-            ImagePreviewBox(
-                bitmap = state.resultBitmap,
-                placeholderText = "Processed result will appear here"
-            )
-
-            // Sensitivity / Threshold Slider - Placed directly below Result Preview for immediate visual feedback
+            // Sensitivity / Threshold Slider - Placed directly below the Comparison View
             Column(modifier = Modifier.fillMaxWidth()) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -196,6 +152,43 @@ fun MainScreen(
                 }
             }
 
+            // Action Buttons
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                OutlinedButton(
+                    onClick = { imagePicker.launch("image/*") },
+                    enabled = !state.isProcessing,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("Select Image")
+                }
+
+                Button(
+                    onClick = { viewModel.onRemoveBackground() },
+                    enabled = state.selectedBitmap != null && !state.isProcessing,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    if (state.isProcessing) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(20.dp),
+                            color = MaterialTheme.colorScheme.onPrimary,
+                            strokeWidth = 2.dp
+                        )
+                    } else {
+                        Text("Remove BG")
+                    }
+                }
+            }
+
+            Text(
+                text = state.statusMessage,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.align(Alignment.CenterHorizontally)
+            )
+
             Button(
                 onClick = {
                     viewModel.onSaveResult { success, msg ->
@@ -212,6 +205,7 @@ fun MainScreen(
         }
     }
 }
+
 
 
 
