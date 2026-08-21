@@ -2,4 +2,5 @@
 <resources>
     <string name="app_name">RMBG</string>
     <string name="action_settings">Settings</string>
+    <string name="status_image_selected">Image selected. Tap \'Remove Background\' to process.</string>
 </resources>

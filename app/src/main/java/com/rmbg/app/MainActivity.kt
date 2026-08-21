@@ -1,11 +1,18 @@
 package com.rmbg.app
 
-import android.content.Intent
+import android.content.ContentValues
+import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
+import android.os.Environment
+import android.provider.MediaStore
+import android.view.View
+import android.widget.EditText
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.rmbg.app.databinding.ActivityMainBinding
@@ -18,22 +25,53 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.asRequestBody
 import java.io.File
+import java.io.OutputStream
+import java.util.concurrent.TimeUnit
 
 class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
     private var selectedFile: File? = null
-    private val client = OkHttpClient()
-    private val API_URL = "http://YOUR_SERVER_IP:8000/remove-bg"
+    private var resultBitmap: Bitmap? = null
+    private var resultBytes: ByteArray? = null
+
+    private val client = OkHttpClient.Builder()
+        .connectTimeout(30, TimeUnit.SECONDS)
+        .readTimeout(90, TimeUnit.SECONDS)
+        .writeTimeout(30, TimeUnit.SECONDS)
+        .build()
+
+    private val prefs by lazy { getSharedPreferences("rmbg_prefs", MODE_PRIVATE) }
+    private val defaultApiUrl = "http://10.0.2.2:8000/remove-bg"
+
+    private fun getApiUrl(): String {
+        return prefs.getString("server_url", defaultApiUrl) ?: defaultApiUrl
+    }
+
+    private fun setApiUrl(url: String) {
+        prefs.edit().putString("server_url", url).apply()
+    }
 
     private val pickImage = registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
-        uri?.let {
-            contentResolver.openInputStream(it)?.use { input ->
-                val file = File(cacheDir, "selected_image.jpg")
-                file.outputStream().use { output -> input.copyTo(output) }
-                selectedFile = file
-                binding.imageView.setImageBitmap(BitmapFactory.decodeFile(file.absolutePath))
-                binding.statusText.text = "Image selected. Tap 'Remove BG' to process."
+        uri?.let { imageUri ->
+            lifecycleScope.launch {
+                try {
+                    val file = withContext(Dispatchers.IO) {
+                        val tempFile = File(cacheDir, "selected_image_${System.currentTimeMillis()}.jpg")
+                        contentResolver.openInputStream(imageUri)?.use { input ->
+                            tempFile.outputStream().use { output -> input.copyTo(output) }
+                        }
+                        tempFile
+                    }
+                    selectedFile = file
+                    val bitmap = withContext(Dispatchers.IO) {
+                        BitmapFactory.decodeFile(file.absolutePath)
+                    }
+                    binding.contentMain.imageView.setImageBitmap(bitmap)
+                    binding.contentMain.statusText.text = getString(R.string.status_image_selected)
+                } catch (e: Exception) {
+                    binding.contentMain.statusText.text = "Failed to load image: ${e.localizedMessage}"
+                }
             }
         }
     }
@@ -43,57 +81,164 @@ class MainActivity : AppCompatActivity() {
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        binding.btnSelectImage.setOnClickListener {
+        setSupportActionBar(binding.toolbar)
+
+        binding.contentMain.btnSelectImage.setOnClickListener {
             pickImage.launch("image/*")
         }
 
-        binding.btnRemoveBg.setOnClickListener {
-            selectedFile?.let { file ->
-                binding.statusText.text = "Processing..."
+        binding.contentMain.btnRemoveBg.setOnClickListener {
+            val file = selectedFile
+            if (file != null && file.exists()) {
                 uploadImage(file)
-            } ?: run {
-                Toast.makeText(this, "Select an image first", Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(this, "Please select an image first", Toast.LENGTH_SHORT).show()
             }
         }
 
-        binding.btnSave.setOnClickListener {
-            // Save functionality
+        binding.contentMain.btnSave.setOnClickListener {
+            val bytes = resultBytes
+            if (bytes != null && resultBitmap != null) {
+                saveResultToGallery(bytes)
+            } else {
+                Toast.makeText(this, "No processed image to save", Toast.LENGTH_SHORT).show()
+            }
         }
+
+        binding.toolbar.setOnMenuItemClickListener { menuItem ->
+            if (menuItem.itemId == R.id.action_settings) {
+                showServerSettingsDialog()
+                true
+            } else {
+                false
+            }
+        }
+    }
+
+    override fun onCreateOptionsMenu(menu: android.view.Menu?): Boolean {
+        menuInflater.inflate(R.menu.menu_main, menu)
+        return true
+    }
+
+    private fun showServerSettingsDialog() {
+        val input = EditText(this).apply {
+            setText(getApiUrl())
+            setSelection(text.length)
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Server API URL")
+            .setView(input)
+            .setPositiveButton("Save") { _, _ ->
+                val newUrl = input.text.toString().trim()
+                if (newUrl.isNotEmpty()) {
+                    setApiUrl(newUrl)
+                    Toast.makeText(this, "API URL updated", Toast.LENGTH_SHORT).show()
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun setProcessingState(isProcessing: Boolean) {
+        binding.contentMain.progressBar.visibility = if (isProcessing) View.VISIBLE else View.GONE
+        binding.contentMain.btnSelectImage.isEnabled = !isProcessing
+        binding.contentMain.btnRemoveBg.isEnabled = !isProcessing
+        binding.contentMain.btnSave.isEnabled = !isProcessing
     }
 
     private fun uploadImage(file: File) {
         lifecycleScope.launch {
+            setProcessingState(true)
+            binding.contentMain.statusText.text = "Uploading and removing background..."
+
             try {
-                val requestBody = file.asRequestBody("image/*".toMediaType())
-                val multipart = MultipartBody.Builder()
-                    .setType(MultipartBody.FORM)
-                    .addFormDataPart("file", file.name, requestBody)
-                    .build()
+                val apiUrl = getApiUrl()
+                val (success, message, bytes) = withContext(Dispatchers.IO) {
+                    val requestBody = file.asRequestBody("image/*".toMediaType())
+                    val multipart = MultipartBody.Builder()
+                        .setType(MultipartBody.FORM)
+                        .addFormDataPart("file", file.name, requestBody)
+                        .build()
 
-                val request = Request.Builder()
-                    .url(API_URL)
-                    .post(multipart)
-                    .build()
+                    val request = Request.Builder()
+                        .url(apiUrl)
+                        .post(multipart)
+                        .build()
 
-                val response = withContext(Dispatchers.IO) {
-                    client.newCall(request).execute()
+                    client.newCall(request).execute().use { response ->
+                        if (response.isSuccessful) {
+                            val bodyBytes = response.body?.bytes()
+                            if (bodyBytes != null && bodyBytes.isNotEmpty()) {
+                                Triple(true, "Done! Background removed successfully.", bodyBytes)
+                            } else {
+                                Triple(false, "Server returned empty response", null)
+                            }
+                        } else {
+                            val errBody = response.body?.string() ?: response.message
+                            Triple(false, "Server error (${response.code}): $errBody", null)
+                        }
+                    }
                 }
 
-                if (response.isSuccessful) {
-                    val bytes = withContext(Dispatchers.IO) {
-                        response.body?.bytes() ?: throw Exception("Empty response")
+                if (success && bytes != null) {
+                    resultBytes = bytes
+                    val bitmap = withContext(Dispatchers.Default) {
+                        BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
                     }
-                    val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-                    binding.resultImageView.setImageBitmap(bitmap)
-                    binding.statusText.text = "Done! Background removed."
-
-                    val resultFile = File(cacheDir, "result.png")
-                    resultFile.outputStream().use { it.write(bytes) }
+                    resultBitmap = bitmap
+                    binding.contentMain.resultImageView.setImageBitmap(bitmap)
+                    binding.contentMain.statusText.text = message
                 } else {
-                    binding.statusText.text = "Error: ${response.message}"
+                    binding.contentMain.statusText.text = message
                 }
             } catch (e: Exception) {
-                binding.statusText.text = "Error: ${e.message}"
+                binding.contentMain.statusText.text = "Error: ${e.localizedMessage ?: "Unknown error"}"
+            } finally {
+                setProcessingState(false)
+            }
+        }
+    }
+
+    private fun saveResultToGallery(bytes: ByteArray) {
+        lifecycleScope.launch {
+            binding.contentMain.statusText.text = "Saving image..."
+            try {
+                val success = withContext(Dispatchers.IO) {
+                    val filename = "rmbg_${System.currentTimeMillis()}.png"
+                    val contentValues = ContentValues().apply {
+                        put(MediaStore.Images.Media.DISPLAY_NAME, filename)
+                        put(MediaStore.Images.Media.MIME_TYPE, "image/png")
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                            put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/RMBG")
+                            put(MediaStore.Images.Media.IS_PENDING, 1)
+                        }
+                    }
+
+                    val uri = contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, contentValues)
+                    if (uri != null) {
+                        contentResolver.openOutputStream(uri)?.use { output: OutputStream ->
+                            output.write(bytes)
+                        }
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                            contentValues.clear()
+                            contentValues.put(MediaStore.Images.Media.IS_PENDING, 0)
+                            contentResolver.update(uri, contentValues, null, null)
+                        }
+                        true
+                    } else {
+                        false
+                    }
+                }
+
+                if (success) {
+                    binding.contentMain.statusText.text = "Saved to Gallery / Pictures / RMBG"
+                    Toast.makeText(this@MainActivity, "Image saved to Gallery!", Toast.LENGTH_SHORT).show()
+                } else {
+                    binding.contentMain.statusText.text = "Failed to save image"
+                    Toast.makeText(this@MainActivity, "Failed to save image", Toast.LENGTH_SHORT).show()
+                }
+            } catch (e: Exception) {
+                binding.contentMain.statusText.text = "Error saving image: ${e.localizedMessage}"
             }
         }
     }
