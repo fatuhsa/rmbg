@@ -1,6 +1,5 @@
 package com.rmbg.app.ui
 
-import android.graphics.BitmapFactory
 import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -37,6 +36,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.rmbg.app.engine.BitmapUtils
 import com.rmbg.app.presentation.MainViewModel
 import com.rmbg.app.ui.components.EngineSelector
 import com.rmbg.app.ui.components.ImagePreviewBox
@@ -56,11 +56,11 @@ fun MainScreen(
     val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
         uri?.let { imageUri ->
             try {
-                context.contentResolver.openInputStream(imageUri)?.use { stream ->
-                    val bitmap = BitmapFactory.decodeStream(stream)
-                    if (bitmap != null) {
-                        viewModel.onImageSelected(bitmap)
-                    }
+                val bitmap = BitmapUtils.decodeSampledBitmap(context, imageUri, maxDimension = 1280)
+                if (bitmap != null) {
+                    viewModel.onImageSelected(bitmap)
+                } else {
+                    Toast.makeText(context, "Could not load image", Toast.LENGTH_SHORT).show()
                 }
             } catch (e: Exception) {
                 Toast.makeText(context, "Failed to load image: ${e.message}", Toast.LENGTH_SHORT).show()
@@ -100,47 +100,6 @@ fun MainScreen(
                     }
                 }
             )
-
-            // Sensitivity / Threshold Slider
-            Column(modifier = Modifier.fillMaxWidth()) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "Removal Sensitivity",
-                        style = MaterialTheme.typography.titleSmall
-                    )
-                    Text(
-                        text = "${(state.sensitivity * 100).toInt()}%",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                }
-                Slider(
-                    value = state.sensitivity,
-                    onValueChange = { viewModel.onSensitivityChanged(it) },
-                    valueRange = 0.1f..0.9f,
-                    enabled = !state.isProcessing,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text(
-                        text = "Softer Edges (10%)",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Text(
-                        text = "Sharper Cut (90%)",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
 
             Text(
                 text = "Original Image",
@@ -196,6 +155,47 @@ fun MainScreen(
                 placeholderText = "Processed result will appear here"
             )
 
+            // Sensitivity / Threshold Slider - Placed directly below Result Preview for immediate visual feedback
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Real-Time Sensitivity",
+                        style = MaterialTheme.typography.titleSmall
+                    )
+                    Text(
+                        text = "${(state.sensitivity * 100).toInt()}%",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+                Slider(
+                    value = state.sensitivity,
+                    onValueChange = { viewModel.onSensitivityChanged(it) },
+                    valueRange = 0.1f..0.9f,
+                    enabled = state.rawMask != null && !state.isProcessing,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = "Softer Edges (10%)",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = "Sharper Cut (90%)",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
             Button(
                 onClick = {
                     viewModel.onSaveResult { success, msg ->
@@ -212,5 +212,6 @@ fun MainScreen(
         }
     }
 }
+
 
 

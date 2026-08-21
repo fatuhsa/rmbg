@@ -48,6 +48,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    private var sensitivityJob: kotlinx.coroutines.Job? = null
+
     fun onSensitivityChanged(newSensitivity: Float) {
         _uiState.update { it.copy(sensitivity = newSensitivity) }
 
@@ -56,17 +58,22 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val rawMask = currentState.rawMask
 
         if (source != null && rawMask != null) {
-            viewModelScope.launch {
-                val updatedBitmap = withContext(Dispatchers.Default) {
-                    BitmapUtils.applyMaskWithThreshold(
-                        source = source,
-                        rawMask = rawMask,
-                        maskWidth = currentState.maskWidth,
-                        maskHeight = currentState.maskHeight,
-                        threshold = newSensitivity
-                    )
+            sensitivityJob?.cancel()
+            sensitivityJob = viewModelScope.launch {
+                try {
+                    val updatedBitmap = withContext(Dispatchers.Default) {
+                        BitmapUtils.applyMaskWithThreshold(
+                            source = source,
+                            rawMask = rawMask,
+                            maskWidth = currentState.maskWidth,
+                            maskHeight = currentState.maskHeight,
+                            threshold = newSensitivity
+                        )
+                    }
+                    _uiState.update { it.copy(resultBitmap = updatedBitmap) }
+                } catch (e: Exception) {
+                    // Ignore cancellation or memory warnings gracefully
                 }
-                _uiState.update { it.copy(resultBitmap = updatedBitmap) }
             }
         }
     }
