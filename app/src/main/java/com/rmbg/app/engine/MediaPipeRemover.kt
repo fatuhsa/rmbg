@@ -32,13 +32,13 @@ class MediaPipeRemover(private val context: Context) : BackgroundRemover {
             val mpImage = BitmapImageBuilder(bitmap).build()
             val result = segmenter.segment(mpImage)
 
-            val confidenceMasks = result.confidenceMasks()
-            if (confidenceMasks.isNullOrEmpty()) {
+            val confidenceMasksOpt = result.confidenceMasks()
+            if (!confidenceMasksOpt.isPresent || confidenceMasksOpt.get().isEmpty()) {
                 segmenter.close()
                 return@withContext Result.failure(Exception("No segmentation mask generated"))
             }
 
-            val maskImage = confidenceMasks[0]
+            val maskImage = confidenceMasksOpt.get()[0]
             val byteBuffer: ByteBuffer = ByteBufferExtractor.extract(maskImage)
             byteBuffer.rewind()
 
