@@ -27,8 +27,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _uiState = MutableStateFlow(MainUiState())
     val uiState: StateFlow<MainUiState> = _uiState.asStateFlow()
 
-    private val mediaPipeRemover by lazy { MediaPipeRemover(getApplication()) }
-    private val onnxRemover by lazy { OnnxU2NetRemover(getApplication()) }
+    private val mediaPipeRemoverLazy = lazy { MediaPipeRemover(getApplication()) }
+    private val mediaPipeRemover by mediaPipeRemoverLazy
+
+    private val onnxRemoverLazy = lazy { OnnxU2NetRemover(getApplication()) }
+    private val onnxRemover by onnxRemoverLazy
 
     fun onImageSelected(bitmap: Bitmap) {
         _uiState.update {
@@ -167,8 +170,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     override fun onCleared() {
         super.onCleared()
         // Release native engine resources when ViewModel is destroyed
-        if (::mediaPipeRemover.isInitialized) mediaPipeRemover.close()
-        if (::onnxRemover.isInitialized) onnxRemover.close()
+        if (mediaPipeRemoverLazy.isInitialized()) {
+            mediaPipeRemover.close()
+        }
+        if (onnxRemoverLazy.isInitialized()) {
+            onnxRemover.close()
+        }
     }
 }
 

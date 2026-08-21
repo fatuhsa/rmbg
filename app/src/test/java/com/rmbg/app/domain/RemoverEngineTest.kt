@@ -7,7 +7,7 @@ import org.junit.Test
 class RemoverEngineTest {
     @Test
     fun testEngineProperties() {
-        assertEquals(2, RemoverEngine.values().size)
+        assertEquals(2, RemoverEngine.entries.size)
         assertTrue(RemoverEngine.MEDIAPIPE.isOffline)
         assertTrue(RemoverEngine.ONNX_U2NET.isOffline)
     }
