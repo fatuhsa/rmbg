@@ -33,7 +33,6 @@ import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.input.pointer.pointerInput
@@ -110,31 +109,21 @@ fun BeforeAfterComparisonCard(
                 val boxWidthPx = constraints.maxWidth.toFloat()
                 val splitXPx = boxWidthPx * splitFraction
 
-                // 1. Checkerboard background — pre-rendered once per size, drawn as a single image
-                val checkerboard = remember(constraints.maxWidth, constraints.maxHeight) {
-                    val w = constraints.maxWidth
-                    val h = constraints.maxHeight
-                    val bmp = android.graphics.Bitmap.createBitmap(w, h, android.graphics.Bitmap.Config.ARGB_8888)
-                    val canvas = android.graphics.Canvas(bmp)
-                    val gridSize = 24
-                    val paint1 = android.graphics.Paint().apply { color = android.graphics.Color.parseColor("#EEEEEE") }
-                    val paint2 = android.graphics.Paint().apply { color = android.graphics.Color.parseColor("#DDDDDD") }
-                    val cols = w / gridSize + 1
-                    val rows = h / gridSize + 1
+                // 1. Checkerboard background drawn directly on hardware-accelerated Canvas
+                Canvas(modifier = Modifier.fillMaxSize()) {
+                    val gridSize = 16.dp.toPx()
+                    val cols = (size.width / gridSize).toInt() + 1
+                    val rows = (size.height / gridSize).toInt() + 1
                     for (r in 0 until rows) {
                         for (c in 0 until cols) {
-                            val rect = android.graphics.RectF(
-                                (c * gridSize).toFloat(), (r * gridSize).toFloat(),
-                                ((c + 1) * gridSize).toFloat(), ((r + 1) * gridSize).toFloat()
+                            val color = if ((r + c) % 2 == 0) Color(0xFFEEEEEE) else Color(0xFFDDDDDD)
+                            drawRect(
+                                color = color,
+                                topLeft = Offset(c * gridSize, r * gridSize),
+                                size = Size(gridSize, gridSize)
                             )
-                            canvas.drawRect(rect, if ((r + c) % 2 == 0) paint1 else paint2)
                         }
                     }
-                    bmp.asImageBitmap()
-                }
-
-                Canvas(modifier = Modifier.fillMaxSize()) {
-                    drawImage(checkerboard)
                 }
 
                 // 2. Result Image (Processed - Background Removed)
