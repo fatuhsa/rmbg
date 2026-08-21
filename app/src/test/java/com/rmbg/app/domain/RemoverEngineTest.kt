@@ -7,8 +7,9 @@ import org.junit.Test
 class RemoverEngineTest {
     @Test
     fun testEngineProperties() {
+        assertEquals(2, RemoverEngine.values().size)
         assertTrue(RemoverEngine.MEDIAPIPE.isOffline)
         assertTrue(RemoverEngine.ONNX_U2NET.isOffline)
-        assertEquals(false, RemoverEngine.CLOUD_API.isOffline)
     }
 }
+

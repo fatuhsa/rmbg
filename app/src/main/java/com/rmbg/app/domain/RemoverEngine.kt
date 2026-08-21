@@ -17,11 +17,6 @@ enum class RemoverEngine(
         title = "General Objects",
         isOffline = true,
         description = "ONNX U2NetP (~500ms) - Best for products & objects"
-    ),
-    CLOUD_API(
-        id = "cloud_api",
-        title = "Cloud Server",
-        isOffline = false,
-        description = "FastAPI Backend - Remote processing"
     )
 }
+

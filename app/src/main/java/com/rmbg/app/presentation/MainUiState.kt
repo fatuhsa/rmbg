@@ -9,7 +9,6 @@ data class MainUiState(
     val selectedEngine: RemoverEngine = RemoverEngine.MEDIAPIPE,
     val isProcessing: Boolean = false,
     val statusMessage: String = "Select an image to get started",
-    val serverUrl: String = "http://10.0.2.2:8000/remove-bg",
-    val showSettingsDialog: Boolean = false,
     val executionTimeMs: Long? = null
 )
+

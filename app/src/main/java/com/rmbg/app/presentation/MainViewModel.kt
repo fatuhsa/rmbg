@@ -7,7 +7,6 @@ import androidx.lifecycle.viewModelScope
 import com.rmbg.app.data.ImageSaver
 import com.rmbg.app.domain.BackgroundRemover
 import com.rmbg.app.domain.RemoverEngine
-import com.rmbg.app.engine.CloudApiRemover
 import com.rmbg.app.engine.MediaPipeRemover
 import com.rmbg.app.engine.OnnxU2NetRemover
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -22,18 +21,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _uiState = MutableStateFlow(MainUiState())
     val uiState: StateFlow<MainUiState> = _uiState.asStateFlow()
 
-    private val prefs by lazy {
-        application.getSharedPreferences("rmbg_prefs", Application.MODE_PRIVATE)
-    }
-
-    init {
-        val savedUrl = prefs.getString("server_url", "http://10.0.2.2:8000/remove-bg") ?: "http://10.0.2.2:8000/remove-bg"
-        _uiState.update { it.copy(serverUrl = savedUrl) }
-    }
-
     private val mediaPipeRemover by lazy { MediaPipeRemover(getApplication()) }
     private val onnxRemover by lazy { OnnxU2NetRemover(getApplication()) }
-    private val cloudRemover by lazy { CloudApiRemover({ _uiState.value.serverUrl }) }
 
     fun onImageSelected(bitmap: Bitmap) {
         _uiState.update {
@@ -55,15 +44,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun onServerUrlChanged(newUrl: String) {
-        prefs.edit().putString("server_url", newUrl).apply()
-        _uiState.update { it.copy(serverUrl = newUrl, showSettingsDialog = false) }
-    }
-
-    fun setSettingsDialogVisible(visible: Boolean) {
-        _uiState.update { it.copy(showSettingsDialog = visible) }
-    }
-
     fun onRemoveBackground() {
         val bitmap = _uiState.value.selectedBitmap ?: return
         val engine = _uiState.value.selectedEngine
@@ -79,7 +59,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val strategy: BackgroundRemover = when (engine) {
                 RemoverEngine.MEDIAPIPE -> mediaPipeRemover
                 RemoverEngine.ONNX_U2NET -> onnxRemover
-                RemoverEngine.CLOUD_API -> cloudRemover
             }
 
             var result: Result<Bitmap>
@@ -123,3 +102,4 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 }
+
