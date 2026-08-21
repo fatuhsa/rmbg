@@ -31,7 +31,7 @@ fun EngineSelector(
                 .padding(top = 4.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            RemoverEngine.values().forEach { engine ->
+            RemoverEngine.entries.forEach { engine ->
                 FilterChip(
                     selected = engine == selectedEngine,
                     onClick = { onEngineSelected(engine) },

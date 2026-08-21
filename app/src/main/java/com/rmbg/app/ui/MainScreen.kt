@@ -36,7 +36,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import com.rmbg.app.engine.BitmapUtils
 import com.rmbg.app.presentation.MainViewModel
 import com.rmbg.app.ui.components.BeforeAfterComparisonCard
 import com.rmbg.app.ui.components.EngineSelector
@@ -55,16 +54,7 @@ fun MainScreen(
 
     val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
         uri?.let { imageUri ->
-            try {
-                val bitmap = BitmapUtils.decodeSampledBitmap(context, imageUri, maxDimension = 1280)
-                if (bitmap != null) {
-                    viewModel.onImageSelected(bitmap)
-                } else {
-                    Toast.makeText(context, "Could not load image", Toast.LENGTH_SHORT).show()
-                }
-            } catch (e: Exception) {
-                Toast.makeText(context, "Failed to load image: ${e.message}", Toast.LENGTH_SHORT).show()
-            }
+            viewModel.onImageUriSelected(context, imageUri)
         }
     }
 

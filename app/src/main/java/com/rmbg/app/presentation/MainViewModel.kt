@@ -1,7 +1,9 @@
 package com.rmbg.app.presentation
 
 import android.app.Application
+import android.content.Context
 import android.graphics.Bitmap
+import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.rmbg.app.data.ImageSaver
@@ -71,26 +73,25 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         )
                     }
                     _uiState.update { it.copy(resultBitmap = updatedBitmap) }
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    throw e  // always re-throw cancellation
                 } catch (e: Exception) {
-                    // Ignore cancellation or memory warnings gracefully
+                    _uiState.update { it.copy(statusMessage = "Sensitivity error: ${e.localizedMessage}") }
                 }
             }
         }
     }
 
     fun onRemoveBackground() {
+        if (_uiState.value.isProcessing) return  // guard before launch
         val bitmap = _uiState.value.selectedBitmap ?: return
         val engine = _uiState.value.selectedEngine
         val sensitivity = _uiState.value.sensitivity
 
-        viewModelScope.launch {
-            _uiState.update {
-                it.copy(
-                    isProcessing = true,
-                    statusMessage = "Removing background using ${engine.title}..."
-                )
-            }
+        // Set processing = true synchronously, before coroutine starts
+        _uiState.update { it.copy(isProcessing = true, statusMessage = "Removing background using ${engine.title}...") }
 
+        viewModelScope.launch {
             val strategy: BackgroundRemover = when (engine) {
                 RemoverEngine.MEDIAPIPE -> mediaPipeRemover
                 RemoverEngine.ONNX_U2NET -> onnxRemover
@@ -124,6 +125,29 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun onImageUriSelected(context: Context, uri: Uri) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isProcessing = true, statusMessage = "Loading image...") }
+            val bitmap = withContext(Dispatchers.IO) {
+                BitmapUtils.decodeSampledBitmap(context, uri, maxDimension = 1280)
+            }
+            if (bitmap != null) {
+                _uiState.update {
+                    it.copy(
+                        selectedBitmap = bitmap,
+                        resultBitmap = null,
+                        rawMask = null,
+                        isProcessing = false,
+                        statusMessage = "Image selected. Tap 'Remove BG' to process.",
+                        executionTimeMs = null
+                    )
+                }
+            } else {
+                _uiState.update { it.copy(isProcessing = false, statusMessage = "Could not load image") }
+            }
+        }
+    }
+
     fun onSaveResult(onComplete: (Boolean, String) -> Unit) {
         val resultBitmap = _uiState.value.resultBitmap ?: return
         viewModelScope.launch {
@@ -138,6 +162,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     onComplete(false, msg)
                 }
         }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        // Release native engine resources when ViewModel is destroyed
+        if (::mediaPipeRemover.isInitialized) mediaPipeRemover.close()
+        if (::onnxRemover.isInitialized) onnxRemover.close()
     }
 }
 

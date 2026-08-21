@@ -11,6 +11,3 @@
 # Keep Coroutines
 -keepnames class kotlinx.coroutines.internal.MainDispatcherFactory {}
 -keepnames class kotlinx.coroutines.CoroutineExceptionHandler {}
-
-# Keep Compose
--keep class androidx.compose.** { *; }

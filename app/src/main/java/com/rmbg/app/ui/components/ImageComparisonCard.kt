@@ -29,19 +29,17 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 
 @Composable
 fun BeforeAfterComparisonCard(
@@ -50,6 +48,10 @@ fun BeforeAfterComparisonCard(
     modifier: Modifier = Modifier
 ) {
     var splitFraction by remember { mutableFloatStateOf(0.5f) }
+
+    // Pre-convert bitmaps to ImageBitmap once; null-safe so branches below can use them safely.
+    val originalImageBitmap = remember(originalBitmap) { originalBitmap?.asImageBitmap() }
+    val resultImageBitmap = remember(resultBitmap) { resultBitmap?.asImageBitmap() }
 
     Card(
         modifier = modifier
@@ -76,7 +78,7 @@ fun BeforeAfterComparisonCard(
             // Only original image selected (not processed yet)
             Box(modifier = Modifier.fillMaxSize()) {
                 Image(
-                    bitmap = originalBitmap.asImageBitmap(),
+                    bitmap = originalImageBitmap!!,
                     contentDescription = "Original Image",
                     modifier = Modifier.fillMaxSize(),
                     contentScale = ContentScale.Fit
@@ -108,26 +110,36 @@ fun BeforeAfterComparisonCard(
                 val boxWidthPx = constraints.maxWidth.toFloat()
                 val splitXPx = boxWidthPx * splitFraction
 
-                // 1. Checkerboard background to show transparency clearly
-                Canvas(modifier = Modifier.fillMaxSize()) {
-                    val gridSize = 24f
-                    val cols = (size.width / gridSize).toInt() + 1
-                    val rows = (size.height / gridSize).toInt() + 1
+                // 1. Checkerboard background — pre-rendered once per size, drawn as a single image
+                val checkerboard = remember(constraints.maxWidth, constraints.maxHeight) {
+                    val w = constraints.maxWidth
+                    val h = constraints.maxHeight
+                    val bmp = android.graphics.Bitmap.createBitmap(w, h, android.graphics.Bitmap.Config.ARGB_8888)
+                    val canvas = android.graphics.Canvas(bmp)
+                    val gridSize = 24
+                    val paint1 = android.graphics.Paint().apply { color = android.graphics.Color.parseColor("#EEEEEE") }
+                    val paint2 = android.graphics.Paint().apply { color = android.graphics.Color.parseColor("#DDDDDD") }
+                    val cols = w / gridSize + 1
+                    val rows = h / gridSize + 1
                     for (r in 0 until rows) {
                         for (c in 0 until cols) {
-                            val color = if ((r + c) % 2 == 0) Color(0xFFEEEEEE) else Color(0xFFDDDDDD)
-                            drawRect(
-                                color = color,
-                                topLeft = Offset(c * gridSize, r * gridSize),
-                                size = Size(gridSize, gridSize)
+                            val rect = android.graphics.RectF(
+                                (c * gridSize).toFloat(), (r * gridSize).toFloat(),
+                                ((c + 1) * gridSize).toFloat(), ((r + 1) * gridSize).toFloat()
                             )
+                            canvas.drawRect(rect, if ((r + c) % 2 == 0) paint1 else paint2)
                         }
                     }
+                    bmp.asImageBitmap()
+                }
+
+                Canvas(modifier = Modifier.fillMaxSize()) {
+                    drawImage(checkerboard)
                 }
 
                 // 2. Result Image (Processed - Background Removed)
                 Image(
-                    bitmap = resultBitmap.asImageBitmap(),
+                    bitmap = resultImageBitmap!!,
                     contentDescription = "Background Removed Result",
                     modifier = Modifier.fillMaxSize(),
                     contentScale = ContentScale.Fit
@@ -135,7 +147,7 @@ fun BeforeAfterComparisonCard(
 
                 // 3. Original Image (Clipped to the left of the split line)
                 Image(
-                    bitmap = originalBitmap.asImageBitmap(),
+                    bitmap = originalImageBitmap!!,
                     contentDescription = "Original Image",
                     modifier = Modifier
                         .fillMaxSize()
@@ -222,4 +234,3 @@ private fun LabelBadge(
         )
     }
 }
-

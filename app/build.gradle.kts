@@ -24,10 +24,22 @@ android {
         }
     }
 
+    signingConfigs {
+        create("release") {
+            storeFile = file("rmbg-release.jks")
+            storePassword = "rmbg2024release"
+            keyAlias = "rmbg"
+            keyPassword = "rmbg2024release"
+            enableV1Signing = true
+            enableV2Signing = true
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
+            signingConfig = signingConfigs.getByName("release")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -74,9 +86,6 @@ dependencies {
     implementation("androidx.activity:activity-compose:1.8.2")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.7.0")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.7.0")
-
-    // Image loading
-    implementation("io.coil-kt:coil-compose:2.6.0")
 
     // 100% Offline AI Engines
     implementation("com.google.mediapipe:tasks-vision:0.10.14")

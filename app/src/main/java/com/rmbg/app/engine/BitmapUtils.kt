@@ -3,9 +3,7 @@ package com.rmbg.app.engine
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
-import android.graphics.Color
 import android.net.Uri
-import java.io.ByteArrayOutputStream
 import kotlin.math.max
 
 object BitmapUtils {
@@ -59,17 +57,13 @@ object BitmapUtils {
     ): Bitmap {
         val width = source.width
         val height = source.height
-
-        val result = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
-        val srcPixels = IntArray(width * height)
-        val resultPixels = IntArray(width * height)
-        source.getPixels(srcPixels, 0, width, 0, 0, width, height)
+        val pixels = IntArray(width * height)  // single array, reused in-place
+        source.getPixels(pixels, 0, width, 0, 0, width, height)
 
         val feather = 0.06f
         val lowBound = (threshold - feather).coerceAtLeast(0.0f)
         val highBound = (threshold + feather).coerceAtMost(1.0f)
         val invRange = 1.0f / (highBound - lowBound).coerceAtLeast(0.001f)
-
         val xRatio = maskWidth.toFloat() / width
         val yRatio = maskHeight.toFloat() / height
 
@@ -77,35 +71,22 @@ object BitmapUtils {
             val maskY = (y * yRatio).toInt().coerceIn(0, maskHeight - 1)
             val maskRowOffset = maskY * maskWidth
             val rowOffset = y * width
-
             for (x in 0 until width) {
                 val maskX = (x * xRatio).toInt().coerceIn(0, maskWidth - 1)
                 val prob = rawMask[maskRowOffset + maskX]
-
                 val alphaFloat = when {
                     prob <= lowBound -> 0.0f
                     prob >= highBound -> 1.0f
                     else -> (prob - lowBound) * invRange
                 }
-                val alpha = (alphaFloat * 255).toInt().coerceIn(0, 255)
-
-                val color = srcPixels[rowOffset + x]
-                val r = Color.red(color)
-                val g = Color.green(color)
-                val b = Color.blue(color)
-                resultPixels[rowOffset + x] = Color.argb(alpha, r, g, b)
+                val alpha = (alphaFloat * 255).toInt().coerceIn(0, 255) shl 24
+                // Mask out old alpha channel and set the new one via bitwise ops
+                pixels[rowOffset + x] = alpha or (pixels[rowOffset + x] and 0x00FFFFFF)
             }
         }
 
-        result.setPixels(resultPixels, 0, width, 0, 0, width, height)
+        val result = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        result.setPixels(pixels, 0, width, 0, 0, width, height)
         return result
     }
-
-    fun toPngByteArray(bitmap: Bitmap): ByteArray {
-        val stream = ByteArrayOutputStream()
-        bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream)
-        return stream.toByteArray()
-    }
 }
-
-
