@@ -2,20 +2,20 @@ package com.rmbg.app.engine
 
 import android.content.Context
 import android.graphics.Bitmap
-import android.graphics.Color
 import com.google.mediapipe.framework.image.BitmapImageBuilder
 import com.google.mediapipe.framework.image.ByteBufferExtractor
 import com.google.mediapipe.tasks.core.BaseOptions
 import com.google.mediapipe.tasks.vision.core.RunningMode
 import com.google.mediapipe.tasks.vision.imagesegmenter.ImageSegmenter
 import com.rmbg.app.domain.BackgroundRemover
+import com.rmbg.app.domain.SegmentationResult
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.nio.ByteBuffer
 
 class MediaPipeRemover(private val context: Context) : BackgroundRemover {
 
-    override suspend fun removeBackground(bitmap: Bitmap): Result<Bitmap> = withContext(Dispatchers.Default) {
+    override suspend fun removeBackground(bitmap: Bitmap, sensitivity: Float): Result<SegmentationResult> = withContext(Dispatchers.Default) {
         try {
             val baseOptions = BaseOptions.builder()
                 .setModelAssetPath("models/selfie_segmenter.tflite")
@@ -44,21 +44,20 @@ class MediaPipeRemover(private val context: Context) : BackgroundRemover {
 
             val maskWidth = maskImage.width
             val maskHeight = maskImage.height
-            val maskBitmap = Bitmap.createBitmap(maskWidth, maskHeight, Bitmap.Config.ARGB_8888)
-            val pixels = IntArray(maskWidth * maskHeight)
+            val totalPixels = maskWidth * maskHeight
+            val rawMask = FloatArray(totalPixels)
 
-            for (i in 0 until (maskWidth * maskHeight)) {
+            for (i in 0 until totalPixels) {
                 val confidence = if (byteBuffer.hasRemaining()) byteBuffer.float else 0f
-                val alpha = (confidence.coerceIn(0f, 1f) * 255).toInt()
-                pixels[i] = Color.argb(alpha, alpha, alpha, alpha)
+                rawMask[i] = confidence.coerceIn(0f, 1f)
             }
-            maskBitmap.setPixels(pixels, 0, maskWidth, 0, 0, maskWidth, maskHeight)
 
-            val output = BitmapUtils.applyAlphaMask(bitmap, maskBitmap)
+            val output = BitmapUtils.applyMaskWithThreshold(bitmap, rawMask, maskWidth, maskHeight, sensitivity)
             segmenter.close()
-            Result.success(output)
+            Result.success(SegmentationResult(output, rawMask, maskWidth, maskHeight))
         } catch (e: Exception) {
             Result.failure(Exception("MediaPipe removal error: ${e.localizedMessage ?: "Model asset missing"}", e))
         }
     }
 }
+

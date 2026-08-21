@@ -7,13 +7,17 @@ import androidx.lifecycle.viewModelScope
 import com.rmbg.app.data.ImageSaver
 import com.rmbg.app.domain.BackgroundRemover
 import com.rmbg.app.domain.RemoverEngine
+import com.rmbg.app.domain.SegmentationResult
+import com.rmbg.app.engine.BitmapUtils
 import com.rmbg.app.engine.MediaPipeRemover
 import com.rmbg.app.engine.OnnxU2NetRemover
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlin.system.measureTimeMillis
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
@@ -29,7 +33,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             it.copy(
                 selectedBitmap = bitmap,
                 resultBitmap = null,
-                statusMessage = "Image selected. Ready to process with ${it.selectedEngine.title}.",
+                rawMask = null,
+                statusMessage = "Image selected. Tap 'Remove BG' to process.",
                 executionTimeMs = null
             )
         }
@@ -38,15 +43,38 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun onEngineChanged(engine: RemoverEngine) {
         _uiState.update {
             it.copy(
-                selectedEngine = engine,
-                statusMessage = "Engine changed to ${engine.title}."
+                selectedEngine = engine
             )
+        }
+    }
+
+    fun onSensitivityChanged(newSensitivity: Float) {
+        _uiState.update { it.copy(sensitivity = newSensitivity) }
+
+        val currentState = _uiState.value
+        val source = currentState.selectedBitmap
+        val rawMask = currentState.rawMask
+
+        if (source != null && rawMask != null) {
+            viewModelScope.launch {
+                val updatedBitmap = withContext(Dispatchers.Default) {
+                    BitmapUtils.applyMaskWithThreshold(
+                        source = source,
+                        rawMask = rawMask,
+                        maskWidth = currentState.maskWidth,
+                        maskHeight = currentState.maskHeight,
+                        threshold = newSensitivity
+                    )
+                }
+                _uiState.update { it.copy(resultBitmap = updatedBitmap) }
+            }
         }
     }
 
     fun onRemoveBackground() {
         val bitmap = _uiState.value.selectedBitmap ?: return
         val engine = _uiState.value.selectedEngine
+        val sensitivity = _uiState.value.sensitivity
 
         viewModelScope.launch {
             _uiState.update {
@@ -61,15 +89,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 RemoverEngine.ONNX_U2NET -> onnxRemover
             }
 
-            var result: Result<Bitmap>
+            var result: Result<SegmentationResult>
             val duration = measureTimeMillis {
-                result = strategy.removeBackground(bitmap)
+                result = strategy.removeBackground(bitmap, sensitivity)
             }
 
-            result.onSuccess { output ->
+            result.onSuccess { segResult ->
                 _uiState.update {
                     it.copy(
-                        resultBitmap = output,
+                        resultBitmap = segResult.bitmap,
+                        rawMask = segResult.rawMask,
+                        maskWidth = segResult.maskWidth,
+                        maskHeight = segResult.maskHeight,
                         isProcessing = false,
                         statusMessage = "Done in ${duration}ms using ${engine.title}!",
                         executionTimeMs = duration
@@ -102,4 +133,5 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 }
+
 

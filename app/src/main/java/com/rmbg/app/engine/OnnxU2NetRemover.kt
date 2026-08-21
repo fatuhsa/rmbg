@@ -7,13 +7,14 @@ import ai.onnxruntime.OnnxTensor
 import ai.onnxruntime.OrtEnvironment
 import ai.onnxruntime.OrtSession
 import com.rmbg.app.domain.BackgroundRemover
+import com.rmbg.app.domain.SegmentationResult
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.nio.FloatBuffer
 
 class OnnxU2NetRemover(private val context: Context) : BackgroundRemover {
 
-    override suspend fun removeBackground(bitmap: Bitmap): Result<Bitmap> = withContext(Dispatchers.Default) {
+    override suspend fun removeBackground(bitmap: Bitmap, sensitivity: Float): Result<SegmentationResult> = withContext(Dispatchers.Default) {
         try {
             val env = OrtEnvironment.getEnvironment()
             val modelBytes = context.assets.open("models/u2netp.onnx").use { it.readBytes() }
@@ -52,27 +53,24 @@ class OnnxU2NetRemover(private val context: Context) : BackgroundRemover {
             val outputTensor = results[0].value as Array<Array<Array<FloatArray>>>
             val out = outputTensor[0][0]
 
-            val maskBitmap = Bitmap.createBitmap(targetSize, targetSize, Bitmap.Config.ARGB_8888)
-            val maskPixels = IntArray(targetSize * targetSize)
-
+            val rawMask = FloatArray(targetSize * targetSize)
             for (y in 0 until targetSize) {
                 for (x in 0 until targetSize) {
                     val raw = out[y][x]
                     val prob = 1.0f / (1.0f + Math.exp(-raw.toDouble())).toFloat()
-                    val alpha = (prob.coerceIn(0f, 1f) * 255).toInt()
-                    maskPixels[y * targetSize + x] = Color.argb(alpha, alpha, alpha, alpha)
+                    rawMask[y * targetSize + x] = prob.coerceIn(0f, 1f)
                 }
             }
-            maskBitmap.setPixels(maskPixels, 0, targetSize, 0, 0, targetSize, targetSize)
 
-            val output = BitmapUtils.applyAlphaMask(bitmap, maskBitmap)
+            val output = BitmapUtils.applyMaskWithThreshold(bitmap, rawMask, targetSize, targetSize, sensitivity)
             results.close()
             tensor.close()
             session.close()
 
-            Result.success(output)
+            Result.success(SegmentationResult(output, rawMask, targetSize, targetSize))
         } catch (e: Exception) {
             Result.failure(Exception("ONNX removal error: ${e.localizedMessage ?: "Model asset missing"}", e))
         }
     }
 }
+
